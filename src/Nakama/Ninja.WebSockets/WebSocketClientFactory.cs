@@ -234,13 +234,9 @@ namespace Nakama.Ninja.WebSockets
                 foreach (var hostAddress in hostAddresses)
                 {
                     if (hostAddress.AddressFamily == AddressFamily.InterNetwork)
-                    {
                         ipv4Addresses.Add(hostAddress);
-                    }
                     else if (hostAddress.AddressFamily == AddressFamily.InterNetworkV6)
-                    {
                         ipv6Addresses.Add(hostAddress);
-                    }
                 }
 
                 // Try ipv6 first, mimicking the default behavior of TcpClient
@@ -267,7 +263,7 @@ namespace Nakama.Ninja.WebSockets
 
             cancellationToken.ThrowIfCancellationRequested();
             System.IO.Stream stream = tcpClient.GetStream();
-            
+
             if (isSecure)
             {
                 SslStream sslStream = new SslStream(stream, false,
