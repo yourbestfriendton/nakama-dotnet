@@ -230,7 +230,6 @@ namespace Nakama.Ninja.WebSockets
                 var hostAddresses = Dns.GetHostAddresses(host);
                 var ipv4Addresses = new List<IPAddress>();
                 var ipv6Addresses = new List<IPAddress>();
-
                 foreach (var hostAddress in hostAddresses)
                 {
                     if (hostAddress.AddressFamily == AddressFamily.InterNetwork)
@@ -279,6 +278,9 @@ namespace Nakama.Ninja.WebSockets
             }
         }
 
+        /// <summary>
+        /// Attempt a tcp connection with a fixed timeout
+        /// </summary>
         private async Task<bool> ConnectTcpClientAsync(TcpClient tcpClient, List<IPAddress> addresses, int port)
         {
             const int timeoutMs = 5000;
