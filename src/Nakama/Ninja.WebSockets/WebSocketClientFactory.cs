@@ -214,11 +214,14 @@ namespace Nakama.Ninja.WebSockets
         protected virtual async Task<System.IO.Stream> GetStream(Guid loggingGuid, bool isSecure, bool noDelay,
             string host, int port, CancellationToken cancellationToken)
         {
-            var tcpClient = new TcpClient {NoDelay = noDelay};
+            TcpClient tcpClient = null;
             IPAddress ipAddress;
+            bool isConnected = false;
+
             if (IPAddress.TryParse(host, out ipAddress))
             {
-                await tcpClient.ConnectAsync(ipAddress, port);
+                tcpClient = new TcpClient { NoDelay = noDelay };
+                isConnected = await ConnectTcpClientAsync(tcpClient, new List<IPAddress> { ipAddress }, port);
             }
             else
             {
@@ -227,57 +230,44 @@ namespace Nakama.Ninja.WebSockets
                 var hostAddresses = Dns.GetHostAddresses(host);
                 var ipv4Addresses = new List<IPAddress>();
                 var ipv6Addresses = new List<IPAddress>();
+
                 foreach (var hostAddress in hostAddresses)
                 {
                     if (hostAddress.AddressFamily == AddressFamily.InterNetwork)
+                    {
                         ipv4Addresses.Add(hostAddress);
+                    }
                     else if (hostAddress.AddressFamily == AddressFamily.InterNetworkV6)
+                    {
                         ipv6Addresses.Add(hostAddress);
-                }
-
-                var isConnected = false;
-                foreach (var address in ipv4Addresses)
-                {
-                    try
-                    {
-                        await tcpClient.ConnectAsync(address, port);
-                        isConnected = true;
-                        break;
-                    }
-                    catch (Exception)
-                    {
-                        // Ignored.
                     }
                 }
 
-                if (!isConnected)
+                // Try ipv6 first, mimicking the default behavior of TcpClient
+                // https://docs.microsoft.com/en-us/dotnet/api/system.net.sockets.tcpclient.-ctor?redirectedfrom=MSDN&view=net-6.0#System_Net_Sockets_TcpClient__ctor_System_String_System_Int32_
+                if (!isConnected && ipv6Addresses.Count > 0)
                 {
-                    tcpClient = new TcpClient(AddressFamily.InterNetworkV6);
-                    tcpClient.NoDelay = noDelay;
-                    foreach (var address in ipv6Addresses)
-                    {
-                        try
-                        {
-                            await tcpClient.ConnectAsync(address, port);
-                            isConnected = true;
-                            break;
-                        }
-                        catch (Exception)
-                        {
-                            // Ignored.
-                        }
-                    }
+                    tcpClient = new TcpClient(AddressFamily.InterNetworkV6) { NoDelay = noDelay };
+                    isConnected = await ConnectTcpClientAsync(tcpClient, ipv6Addresses, port);
+                }
+
+                if (!isConnected && ipv4Addresses.Count > 0)
+                {
+                    tcpClient = new TcpClient { NoDelay = noDelay };
+                    isConnected = await ConnectTcpClientAsync(tcpClient, ipv4Addresses, port);
                 }
 
                 if (!isConnected)
                 {
+                    tcpClient = new TcpClient { NoDelay = noDelay };
+                    tcpClient.Client.DualMode = true;
                     await tcpClient.ConnectAsync(host, port);
                 }
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             System.IO.Stream stream = tcpClient.GetStream();
-
+            
             if (isSecure)
             {
                 SslStream sslStream = new SslStream(stream, false,
@@ -291,6 +281,31 @@ namespace Nakama.Ninja.WebSockets
             {
                 return stream;
             }
+        }
+
+        private async Task<bool> ConnectTcpClientAsync(TcpClient tcpClient, List<IPAddress> addresses, int port)
+        {
+            const int timeoutMs = 5000;
+
+            try
+            {
+                Task timeoutTask = Task.Delay(timeoutMs);
+                Task connectAsyncTask = tcpClient.ConnectAsync(addresses.ToArray(), port);
+
+                await Task.WhenAny(timeoutTask, connectAsyncTask);
+
+                if (timeoutTask.IsCompleted)
+                {
+                    return false;
+                }
+            }
+            catch (Exception)
+            {
+                // Ignored.
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
