@@ -255,7 +255,6 @@ namespace Nakama.Ninja.WebSockets
                 if (!isConnected)
                 {
                     tcpClient = new TcpClient { NoDelay = noDelay };
-                    tcpClient.Client.DualMode = true;
                     await tcpClient.ConnectAsync(host, port);
                 }
             }
